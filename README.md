@@ -4,7 +4,9 @@ A simple Python script to calculate Limit of Detection (LLOD) and Limit of Quant
 
 ## Installation
 
-This script uses `uv` for dependency management. Install the script and its dependencies using:
+This script uses `uv` for dependency management. If you need to install uv, please follow [these instructions](https://docs.astral.sh/uv/getting-started/installation/).
+
+Install the llod/lloq script and its dependencies using:
 
 ```bash
 uv pip install -e .
