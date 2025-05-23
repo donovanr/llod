@@ -4,15 +4,16 @@ A simple Python script to calculate Limit of Detection (LLOD) and Limit of Quant
 
 ## Installation
 
-This script uses `uv` for dependency management. If you need to install uv, please follow [these instructions](https://docs.astral.sh/uv/getting-started/installation/).
+This script uses `uv` for dependency management (if you need to install uv, please follow [these instructions](https://docs.astral.sh/uv/getting-started/installation/)).
 
-Install the llod/lloq script and its dependencies using:
+Install the llod/lloq script and its dependencies, first clone this repo:
 
 ```bash
-uv pip install -e .
+git clone https://github.com/donovanr/llod.git
+cd llod
 ```
 
-or run directly with:
+and then run directly with:
 
 ```bash
 uv run llodlloq.py data/estrone.csv
@@ -21,7 +22,7 @@ uv run llodlloq.py data/estrone.csv
 ## Usage
 
 ```bash
-python llodlloq.py path/to/data.csv [--weight_type {none,1/x,1/x^2}] [--sig_figs SIG_FIGS]
+uv run python llodlloq.py path/to/data.csv [--weight_type {none,1/x,1/x^2}] [--sig_figs SIG_FIGS]
 ```
 
 ## Arguments
@@ -32,9 +33,9 @@ python llodlloq.py path/to/data.csv [--weight_type {none,1/x,1/x^2}] [--sig_figs
 
 
 - `--weight_type`: Type of weighting to apply in the regression:
-  - none: No weighting
-  - 1/x: Weight by 1/x (inverse of concentration)
-  - 1/x^2: Weight by 1/x² (default)
+  - `none`: No weighting
+  - `1/x`: Weight by 1/x (inverse of concentration)
+  - `1/x^2`: Weight by 1/x² (default)
 - `--sig_figs`: Number of significant figures to display in the results (default: 3)
 
 ## Input Data Format
@@ -54,7 +55,7 @@ x,y
 ## Output
 
 ```bash
-$ python llodlloq.py data/estrone.csv --sig_figs 4
+$ uv run python llodlloq.py data/estrone.csv --sig_figs 4
 
 Results:
 intercept: 1.864
