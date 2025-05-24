@@ -1,6 +1,6 @@
 # LLOD/LLOQ Calculator
 
-A simple Python script to calculate Limit of Detection (LLOD) and Limit of Quantification (LLOQ) from concentration-response data using weighted least squares regression.
+A tool to calculate Limit of Detection (LLOD) and Limit of Quantification (LLOQ) from concentration-response data using weighted least squares regression.
 
 ## Streamlit App
 
@@ -15,7 +15,6 @@ The app allows you to:
 - Visualize concentration-response curves with LLOD and LLOQ indicators
 - Download results as CSV
 
-
 ## Command Line Usage
 
 For batch processing, you can also use the command line tool.
@@ -24,41 +23,60 @@ For batch processing, you can also use the command line tool.
 
 This script uses `uv` for dependency management (if you need to install uv, please follow [these instructions](https://docs.astral.sh/uv/getting-started/installation/)).
 
-Install the llod/lloq script and its dependencies, first clone this repo:
+Install the LLOD/LLOQ calculator and its dependencies, first clone this repo:
 
 ```bash
 git clone https://github.com/donovanr/llod.git
 cd llod
 ```
 
-and then run directly with:
+### Usage
+
+You can run the command-line script directly with:
 
 ```bash
-uv run llodlloq.py data/estrone.csv
+python calc.py path/to/data.csv
 ```
 
-## Usage
+Or with uv:
 
 ```bash
-uv run python llodlloq.py path/to/data.csv [--weight_type {none,1/x,1/x^2}] [--sig_figs SIG_FIGS]
+uv run calc.py path/to/data.csv
 ```
 
-## Arguments
+### Arguments
 
-- `csv_file`: Path to a CSV file containing concentration-response data. The file must contain columns named ‘x’ (concentration) and ‘y’ (response).
+- `csv_file`: Path to a CSV file containing concentration-response data. The file must contain columns named 'x' (concentration) and 'y' (response).
 
-## Optional Arguments
-
+### Optional Arguments
 
 - `--weight_type`: Type of weighting to apply in the regression:
   - `none`: No weighting
   - `1/x`: Weight by 1/x (inverse of concentration)
   - `1/x^2`: Weight by 1/x² (default)
 - `--sig_figs`: Number of significant figures to display in the results (default: 3)
+- `--output`: Path to save results as a CSV file (optional)
+
+### Examples
+
+Basic usage:
+```bash
+uv run python calc.py data/estrone.csv
+```
+
+With weighting and significant figures options:
+```bash
+uv run python calc.py data/estrone.csv --weight_type 1/x --sig_figs 4
+```
+
+Save results to a CSV file:
+```bash
+uv run python calc.py data/estrone.csv --output results.csv
+```
 
 ## Input Data Format
 
-The CSV file should contain two columns: ‘x’ and ‘y’. For example:
+The CSV file should contain two columns: 'x' and 'y'. For example:
 
 ```
 x,y
@@ -70,14 +88,39 @@ x,y
 500,124.2
 ```
 
-## Output
+## Example Output
 
-```bash
-$ uv run python llodlloq.py data/estrone.csv --sig_figs 4
-
+```
 Results:
 intercept: 1.864
-slope: 0.635
-LLOD: 2.115
-LLOQ: 14.09
+slope   : 0.635
+LLOD    : 2.115
+LLOQ    : 14.09
+```
+
+## Running the Streamlit App Locally
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the app
+streamlit run app.py
+```
+
+## Methodology
+
+This calculator uses weighted least squares regression in log-log space to model the relationship between concentration (x) and response (y). The model follows the power law form:
+
+y = a·x^b
+
+Where:
+- a is the intercept
+- b is the slope
+
+The LLOD is calculated as the concentration that would produce a response 3 times the background:
+LLOD = (3/intercept)^(1/slope)
+
+The LLOQ is calculated as the concentration that would produce a response 10 times the background:
+LLOQ = (10/intercept)^(1/slope)
 ```

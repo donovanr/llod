@@ -1,7 +1,7 @@
 [project]
 name = "llodlloq"
 version = "0.1.0"
-description = "Add your description here"
+description = "Calculate Limit of Detection (LLOD) and Limit of Quantification (LLOQ) from concentration-response data"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
