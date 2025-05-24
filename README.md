@@ -2,7 +2,25 @@
 
 A simple Python script to calculate Limit of Detection (LLOD) and Limit of Quantification (LLOQ) from concentration-response data using weighted least squares regression.
 
-## Installation
+## Streamlit App
+
+The easiest way to use this tool is through the web app:
+
+[Open LLOD/LLOQ Calculator App](https://llodlloq.streamlit.app)
+
+The app allows you to:
+- Upload your own CSV data or use sample data
+- Choose weighting options (none, 1/x, or 1/x²)
+- Adjust significant figures in results
+- Visualize concentration-response curves with LLOD and LLOQ indicators
+- Download results as CSV
+
+
+## Command Line Usage
+
+For batch processing, you can also use the command line tool.
+
+### Installation
 
 This script uses `uv` for dependency management (if you need to install uv, please follow [these instructions](https://docs.astral.sh/uv/getting-started/installation/)).
 
