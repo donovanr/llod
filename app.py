@@ -15,18 +15,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# App title and description
-st.title("LLOD/LLOQ Calculator")
-st.write(
-    """
-Upload a CSV file with 'x' and 'y' columns to calculate the Limit of Detection (LLOD)
-and Limit of Quantification (LLOQ) using weighted least squares regression.
-"""
-)
-
 # Initialize session state for application state management
 if "data" not in st.session_state:
     st.session_state.data = None
+if "file_name" not in st.session_state:
+    st.session_state.file_name = None
 if "data_points_chart" not in st.session_state:
     st.session_state.data_points_chart = None
 if "x_domain" not in st.session_state:
@@ -37,14 +30,39 @@ if "last_weight_type" not in st.session_state:
     st.session_state.last_weight_type = None
 if "calculated_results" not in st.session_state:
     st.session_state.calculated_results = {}
+if "need_recalculation" not in st.session_state:
+    st.session_state.need_recalculation = True
+
+# Define callback functions for input changes
+def on_weight_change():
+    """Called when weight type is changed"""
+    if st.session_state.data is not None:
+        if st.session_state.weight_type != st.session_state.last_weight_type:
+            st.session_state.need_recalculation = True
+
+def on_recalculate():
+    """Called when recalculate button is pressed"""
+    st.session_state.need_recalculation = True
+
+# App title and description
+st.title("LLOD/LLOQ Calculator")
+st.write(
+    """
+Upload a CSV file with 'x' and 'y' columns to calculate the Limit of Detection (LLOD)
+and Limit of Quantification (LLOQ) using weighted least squares regression.
+"""
+)
 
 # Sidebar with controls
 st.sidebar.header("Settings")
 
+# Use key parameter to track changes via session state
 weight_type = st.sidebar.selectbox(
     "Weight Type",
     options=["1/x^2", "1/x", "none"],
     index=0,
+    key="weight_type",
+    on_change=on_weight_change,
     help="Type of weighting to apply in the regression",
 )
 
@@ -53,31 +71,71 @@ sig_figs = st.sidebar.slider(
     min_value=1,
     max_value=6,
     value=3,
+    key="sig_figs",
     help="Number of significant figures to display in results",
 )
 
 # Add recalculate button to sidebar
 recalculate = st.sidebar.button(
-    "Recalculate", key="recalculate", help="Click to recalculate with current settings"
+    "Recalculate",
+    key="recalculate",
+    on_click=on_recalculate,
+    help="Click to recalculate with current settings"
 )
 
 # File upload section
 st.subheader("Data Input")
 
-# Two columns for upload options
-col1, col2 = st.columns(2)
+# Example data for download
+example_data = """x,y
+2,2.9
+5,5.1
+10,8.1
+50,28.1
+100,52.5
+500,124.2"""
 
-with col1:
-    uploaded_file = st.file_uploader(
-        "Upload a CSV file with 'x' and 'y' columns", type=["csv"], key="file_uploader"
-    )
+# Create a download button for example data
+example_data_bytes = example_data.encode('utf-8')
+st.download_button(
+    label="Download Example Data",
+    data=example_data_bytes,
+    file_name="example_data.csv",
+    mime="text/csv",
+    help="Download example data to try with the calculator"
+)
 
-with col2:
-    use_sample = st.checkbox("Use sample data instead", value=False)
+st.write("Upload your CSV file with 'x' and 'y' columns:")
+
+# File uploader
+uploaded_file = st.file_uploader(
+    "Upload a CSV file",
+    type=["csv"],
+    key="file_uploader",
+    help="CSV file must contain 'x' and 'y' columns with positive values"
+)
+
+# Handle file upload
+if uploaded_file is not None:
+    try:
+        data = pd.read_csv(uploaded_file)
+
+        # Check if this is a new file (different from what's in session state)
+        if st.session_state.file_name != uploaded_file.name:
+            st.session_state.data = data
+            st.session_state.file_name = uploaded_file.name
+            st.session_state.data_points_chart = None  # Reset visualization
+            st.session_state.calculated_results = {}   # Reset calculations
+            st.session_state.need_recalculation = True
+            st.success(f"File '{uploaded_file.name}' uploaded successfully")
+    except Exception as e:
+        st.error(f"Error reading file: {str(e)}")
+        st.session_state.data = None
+        st.session_state.file_name = None
 
 
 # Cache data processing function to avoid recalculation
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def process_uploaded_data(data):
     """
     Process the uploaded data once and cache the result.
@@ -101,47 +159,65 @@ def process_uploaded_data(data):
     return data
 
 
-def calculate_results(data, weight_type):
+def calculate_results(data, weight_type, sig_figs):
     """Calculate results based on data and weight type"""
+    with st.spinner("Calculating results..."):
+        try:
+            # Run the analysis
+            results = weighted_least_squares(
+                data.x.values, data.y.values, weight_type=weight_type
+            )
+
+            # Format the output with the specified number of significant figures
+            formatted_results = {
+                key: format_with_sig_figs(value, sig_figs) for key, value in results.items()
+            }
+
+            return results, formatted_results
+        except Exception as e:
+            st.error(f"Error during calculation: {str(e)}")
+            return None, None
+
+
+def calculate_initial_domains(data):
+    """
+    Calculate initial results and determine appropriate domains for the visualization
+    that include both the data points and the LLOD/LLOQ values.
+    """
     try:
-        # Run the analysis
-        results = weighted_least_squares(
-            data.x.values, data.y.values, weight_type=weight_type
+        # Calculate results with default weighting to get LLOD/LLOQ values
+        default_results = weighted_least_squares(
+            data.x.values, data.y.values, weight_type="1/x^2"
         )
 
-        # Format the output with the specified number of significant figures
-        formatted_results = {
-            key: format_with_sig_figs(value, sig_figs) for key, value in results.items()
-        }
+        # Extract LLOD and LLOQ values
+        llod = float(default_results["LLOD"])
+        lloq = float(default_results["LLOQ"])
 
-        return results, formatted_results
-    except Exception as e:
-        st.error(f"Error during calculation: {str(e)}")
-        return None, None
+        # Determine data range
+        x_min_data = min(data.x)
+        x_max_data = max(data.x)
+        y_min_data = min(data.y)
+        y_max_data = max(data.y)
 
-
-# Cache the creation of the base data visualization
-@st.cache_data
-def create_base_visualization(data):
-    """
-    Create and cache the base data visualization (just the data points).
-    This doesn't depend on weighting type, so it can be cached.
-    """
-    try:
-        # Determine safe x and y domains for log scaling
-        x_min = max(1e-10, min(data.x))
-        x_max = max(data.x)
-        y_min = max(1e-10, min(data.y))
-        y_max = max(data.y)
+        # Create a union of data range and LLOD/LLOQ values for x-axis
+        x_values = list(data.x) + [llod, lloq]
+        x_min = min(x_values)
+        x_max = max(x_values)
 
         # Add padding in log space
         x_padding = 0.3  # 30% padding
         y_padding = 0.3
 
+        # Ensure x_min is positive for log scaling
+        x_min = max(1e-10, x_min)
+        y_min = max(1e-10, y_min_data)
+
+        # Add padding in log space
         log_x_min = np.log10(x_min) - x_padding
         log_x_max = np.log10(x_max) + x_padding
         log_y_min = np.log10(y_min) - y_padding
-        log_y_max = np.log10(y_max) + y_padding
+        log_y_max = np.log10(y_max_data) + y_padding
 
         # Convert back to linear space with padding
         x_min_padded = 10 ** log_x_min
@@ -149,10 +225,51 @@ def create_base_visualization(data):
         y_min_padded = 10 ** log_y_min
         y_max_padded = 10 ** log_y_max
 
-        # Save domains for reuse
+        # Return the domains
         x_domain = [x_min_padded, x_max_padded]
         y_domain = [y_min_padded, y_max_padded]
 
+        return x_domain, y_domain
+
+    except Exception as e:
+        st.error(f"Error calculating initial domains: {str(e)}")
+
+        # Fallback to just using the data points with padding
+        try:
+            x_min = max(1e-10, min(data.x))
+            x_max = max(data.x)
+            y_min = max(1e-10, min(data.y))
+            y_max = max(data.y)
+
+            # Add padding in log space
+            x_padding = 0.5  # 50% padding as fallback
+            y_padding = 0.5
+
+            log_x_min = np.log10(x_min) - x_padding
+            log_x_max = np.log10(x_max) + x_padding
+            log_y_min = np.log10(y_min) - y_padding
+            log_y_max = np.log10(y_max) + y_padding
+
+            # Convert back to linear space with padding
+            x_min_padded = 10 ** log_x_min
+            x_max_padded = 10 ** log_x_max
+            y_min_padded = 10 ** log_y_min
+            y_max_padded = 10 ** log_y_max
+
+            return [x_min_padded, x_max_padded], [y_min_padded, y_max_padded]
+        except:
+            # If all else fails, return None
+            return None, None
+
+
+# Cache the creation of the base data visualization
+@st.cache_data(show_spinner=False)
+def create_base_visualization(data, x_domain, y_domain):
+    """
+    Create and cache the base data visualization (just the data points).
+    This doesn't depend on weighting type, so it can be cached.
+    """
+    try:
         # Create dataframe for data points
         point_data = pd.DataFrame({
             "x": data.x,
@@ -175,11 +292,11 @@ def create_base_visualization(data):
             ),
         ).mark_circle(size=60)
 
-        return base_chart, x_domain, y_domain
+        return base_chart
 
     except Exception as e:
         st.error(f"Error creating base visualization: {str(e)}")
-        return None, None, None
+        return None
 
 
 def create_model_visualization(results, x_domain, y_domain):
@@ -254,7 +371,7 @@ def create_model_visualization(results, x_domain, y_domain):
         return None, None
 
 
-def display_results(data, raw_results, formatted_results, weight_type):
+def display_results(data, raw_results, formatted_results, weight_type, x_domain, y_domain):
     """Display the results and combined visualization"""
     # Results section
     st.header("Results")
@@ -289,18 +406,17 @@ def display_results(data, raw_results, formatted_results, weight_type):
         # Check if we already have a base chart cached in session state
         if st.session_state.data_points_chart is None:
             # Create and cache the base chart
-            base_chart, x_domain, y_domain = create_base_visualization(data)
-            if base_chart is not None:
-                st.session_state.data_points_chart = base_chart
-                st.session_state.x_domain = x_domain
-                st.session_state.y_domain = y_domain
+            with st.spinner("Creating visualization..."):
+                base_chart = create_base_visualization(data, x_domain, y_domain)
+                if base_chart is not None:
+                    st.session_state.data_points_chart = base_chart
 
         # Get the model-specific visualization components
         if st.session_state.data_points_chart is not None:
             fit_line, threshold_chart = create_model_visualization(
                 raw_results,
-                st.session_state.x_domain,
-                st.session_state.y_domain
+                x_domain,
+                y_domain
             )
 
             if fit_line is not None and threshold_chart is not None:
@@ -362,29 +478,7 @@ def display_results(data, raw_results, formatted_results, weight_type):
     )
 
 
-# Main processing logic
-if use_sample:
-    sample_data = """x,y
-2,2.9
-5,5.1
-10,8.1
-50,28.1
-100,52.5
-500,124.2"""
-    data = pd.read_csv(io.StringIO(sample_data))
-    st.session_state.data = data
-    st.success("Using sample data")
-
-elif uploaded_file is not None:
-    try:
-        data = pd.read_csv(uploaded_file)
-        st.session_state.data = data
-        st.success(f"File '{uploaded_file.name}' uploaded successfully")
-    except Exception as e:
-        st.error(f"Error reading file: {str(e)}")
-        st.session_state.data = None
-
-# Display uploaded data
+# Display uploaded data and run calculations
 if st.session_state.data is not None:
     # Process the data once and cache the result
     processed_data = process_uploaded_data(st.session_state.data)
@@ -393,35 +487,38 @@ if st.session_state.data is not None:
         st.subheader("Data Preview")
         st.dataframe(processed_data)
 
-        # Check if we need to recalculate based on weight type change
+        # Calculate visualization domains that include LLOD/LLOQ
+        if st.session_state.x_domain is None or st.session_state.y_domain is None:
+            with st.spinner("Calculating visualization domains..."):
+                x_domain, y_domain = calculate_initial_domains(processed_data)
+                st.session_state.x_domain = x_domain
+                st.session_state.y_domain = y_domain
+        else:
+            x_domain = st.session_state.x_domain
+            y_domain = st.session_state.y_domain
+
+        # Check if we need to recalculate
         weight_changed = st.session_state.last_weight_type != weight_type
 
         # Calculate or retrieve results
-        if recalculate or weight_changed or weight_type not in st.session_state.calculated_results:
+        if st.session_state.need_recalculation or weight_changed or weight_type not in st.session_state.calculated_results:
             # Need to calculate new results
-            raw_results, formatted_results = calculate_results(processed_data, weight_type)
+            raw_results, formatted_results = calculate_results(processed_data, weight_type, sig_figs)
 
             if raw_results is not None:
                 # Store results for this weight type
                 st.session_state.calculated_results[weight_type] = (raw_results, formatted_results)
                 st.session_state.last_weight_type = weight_type
+                st.session_state.need_recalculation = False
 
                 # Display results and visualization
-                display_results(processed_data, raw_results, formatted_results, weight_type)
+                display_results(processed_data, raw_results, formatted_results, weight_type, x_domain, y_domain)
         else:
             # Reuse previously calculated results for this weight type
-            if weight_type in st.session_state.calculated_results:
-                raw_results, formatted_results = st.session_state.calculated_results[weight_type]
-                display_results(processed_data, raw_results, formatted_results, weight_type)
-            else:
-                # Should not happen, but just in case
-                raw_results, formatted_results = calculate_results(processed_data, weight_type)
-                if raw_results is not None:
-                    st.session_state.calculated_results[weight_type] = (raw_results, formatted_results)
-                    st.session_state.last_weight_type = weight_type
-                    display_results(processed_data, raw_results, formatted_results, weight_type)
+            raw_results, formatted_results = st.session_state.calculated_results[weight_type]
+            display_results(processed_data, raw_results, formatted_results, weight_type, x_domain, y_domain)
 else:
-    st.info("Please upload a CSV file or use the sample data to begin analysis")
+    st.info("Please upload a CSV file to begin analysis. You can use the example data provided.")
 
 # Add footer
 st.markdown("---")
