@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import altair as alt
-import io
 
 # Import functions from llodlloq module
 from src.llodlloq import weighted_least_squares, format_with_sig_figs
@@ -15,7 +14,8 @@ st.set_page_config(
 )
 
 # Add custom CSS to control the max width of the content and improve spacing
-st.markdown("""
+st.markdown(
+    """
 <style>
     .main .block-container {
         max-width: 900px;
@@ -33,7 +33,9 @@ st.markdown("""
         margin-bottom: 1.5rem !important;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # Initialize session state
 if "data" not in st.session_state:
@@ -82,26 +84,26 @@ with col1:
         "Upload a CSV file",
         type=["csv"],
         key="file_uploader",
-        help="CSV file must contain 'x' and 'y' columns with positive values"
+        help="CSV file must contain 'x' and 'y' columns with positive values",
     )
 
 with col2:
     st.write("Or try with example data:")
     # Create a download button for example data
-    example_data_bytes = example_data.encode('utf-8')
+    example_data_bytes = example_data.encode("utf-8")
     st.download_button(
         label="Download Example Data",
         data=example_data_bytes,
         file_name="example_data.csv",
         mime="text/csv",
-        help="Download example data to try with the calculator"
+        help="Download example data to try with the calculator",
     )
 
     # Recalculate button
     recalculate = st.button(
         "Recalculate",
         key="recalculate",
-        help="Click to recalculate with current settings"
+        help="Click to recalculate with current settings",
     )
     if recalculate:
         st.session_state.need_recalculation = True
@@ -160,14 +162,10 @@ def calculate_all_results(data, sig_figs):
             # Calculate results for each weighting type
             for weight_type in ["1/x^2", "1/x", "none"]:
                 # Run the analysis
-                weight_results = weighted_least_squares(
-                    data.x.values, data.y.values, weight_type=weight_type
-                )
+                weight_results = weighted_least_squares(data.x.values, data.y.values, weight_type=weight_type)
 
                 # Format the output with the specified number of significant figures
-                weight_formatted = {
-                    key: format_with_sig_figs(value, sig_figs) for key, value in weight_results.items()
-                }
+                weight_formatted = {key: format_with_sig_figs(value, sig_figs) for key, value in weight_results.items()}
 
                 results[weight_type] = weight_results
                 formatted_results[weight_type] = weight_formatted
@@ -192,7 +190,7 @@ def calculate_visualization_data(data, results):
         all_lloq_values = []
 
         # For each weighting type
-        for weight_type, result in results.items():
+        for _weight_type, result in results.items():
             intercept = result["intercept"]
             slope = result["slope"]
             llod = float(result["LLOD"])
@@ -203,8 +201,8 @@ def calculate_visualization_data(data, results):
             all_lloq_values.append(lloq)
 
             # Calculate y values at LLOD and LLOQ
-            y_at_llod = intercept * (llod ** slope)
-            y_at_lloq = intercept * (lloq ** slope)
+            y_at_llod = intercept * (llod**slope)
+            y_at_lloq = intercept * (lloq**slope)
             all_y_values.extend([y_at_llod, y_at_lloq])
 
         # Add all threshold values to x values
@@ -226,10 +224,10 @@ def calculate_visualization_data(data, results):
         log_y_max = np.log10(y_max) + y_padding
 
         # Convert back to linear space with padding
-        x_min_padded = 10 ** log_x_min
-        x_max_padded = 10 ** log_x_max
-        y_min_padded = 10 ** log_y_min
-        y_max_padded = 10 ** log_y_max
+        x_min_padded = 10**log_x_min
+        x_max_padded = 10**log_x_max
+        y_min_padded = 10**log_y_min
+        y_max_padded = 10**log_y_max
 
         # Create x range for prediction lines (100 points from min to max)
         x_range = np.logspace(np.log10(x_min_padded), np.log10(x_max_padded), 100)
@@ -241,12 +239,14 @@ def calculate_visualization_data(data, results):
         # Now create visualization data for all weighting types
 
         # Data points (same for all weighting types)
-        point_data = pd.DataFrame({
-            "x": data.x,
-            "y": data.y,
-            "Series": "Data Points",
-            "Weight_Type": "All"  # Same points shown for all weight types
-        })
+        point_data = pd.DataFrame(
+            {
+                "x": data.x,
+                "y": data.y,
+                "Series": "Data Points",
+                "Weight_Type": "All",  # Same points shown for all weight types
+            }
+        )
 
         # Create fit lines for each weighting type
         fit_data_frames = []
@@ -259,30 +259,36 @@ def calculate_visualization_data(data, results):
             lloq = float(result["LLOQ"])
 
             # Calculate y values for the fit line
-            y_pred = intercept * x_range ** slope
+            y_pred = intercept * x_range**slope
 
             # Create fit line dataframe
-            fit_df = pd.DataFrame({
-                "x": x_range,
-                "y": y_pred,
-                "Series": "Fitted Curve",
-                "Weight_Type": weight_type
-            })
+            fit_df = pd.DataFrame(
+                {
+                    "x": x_range,
+                    "y": y_pred,
+                    "Series": "Fitted Curve",
+                    "Weight_Type": weight_type,
+                }
+            )
 
             # Create LLOD and LLOQ threshold dataframes
-            llod_df = pd.DataFrame({
-                "x": [llod] * 2,
-                "y": [y_min_padded, y_max_padded],
-                "Series": "LLOD",
-                "Weight_Type": weight_type
-            })
+            llod_df = pd.DataFrame(
+                {
+                    "x": [llod] * 2,
+                    "y": [y_min_padded, y_max_padded],
+                    "Series": "LLOD",
+                    "Weight_Type": weight_type,
+                }
+            )
 
-            lloq_df = pd.DataFrame({
-                "x": [lloq] * 2,
-                "y": [y_min_padded, y_max_padded],
-                "Series": "LLOQ",
-                "Weight_Type": weight_type
-            })
+            lloq_df = pd.DataFrame(
+                {
+                    "x": [lloq] * 2,
+                    "y": [y_min_padded, y_max_padded],
+                    "Series": "LLOQ",
+                    "Weight_Type": weight_type,
+                }
+            )
 
             fit_data_frames.append(fit_df)
             threshold_data_frames.append(pd.concat([llod_df, lloq_df]))
@@ -297,7 +303,7 @@ def calculate_visualization_data(data, results):
             "fit_data": fit_data,
             "threshold_data": threshold_data,
             "x_domain": x_domain,
-            "y_domain": y_domain
+            "y_domain": y_domain,
         }
 
     except Exception as e:
@@ -318,61 +324,68 @@ def create_visualization(vis_data, selected_weight):
         y_domain = vis_data["y_domain"]
 
         # Base chart for data points (always visible)
-        points_chart = alt.Chart(point_data).encode(
-            x=alt.X("x:Q",
-                   scale=alt.Scale(type="log", domain=x_domain),
-                   title="Concentration"),
-            y=alt.Y("y:Q",
-                   scale=alt.Scale(type="log", domain=y_domain),
-                   title="Response"),
-            color=alt.Color(
-                "Series:N",
-                scale=alt.Scale(scheme="dark2"),
-                legend=alt.Legend(title=None, orient="top"),
-            ),
-        ).mark_circle(size=60)
+        points_chart = (
+            alt.Chart(point_data)
+            .encode(
+                x=alt.X(
+                    "x:Q",
+                    scale=alt.Scale(type="log", domain=x_domain),
+                    title="Concentration",
+                ),
+                y=alt.Y(
+                    "y:Q",
+                    scale=alt.Scale(type="log", domain=y_domain),
+                    title="Response",
+                ),
+                color=alt.Color(
+                    "Series:N",
+                    scale=alt.Scale(scheme="dark2"),
+                    legend=alt.Legend(title=None, orient="top"),
+                ),
+            )
+            .mark_circle(size=60)
+        )
 
         # Filter the fit data for the selected weight type
-        selected_fit_data = fit_data[fit_data['Weight_Type'] == selected_weight]
-        selected_threshold_data = threshold_data[threshold_data['Weight_Type'] == selected_weight]
+        selected_fit_data = fit_data[fit_data["Weight_Type"] == selected_weight]
+        selected_threshold_data = threshold_data[threshold_data["Weight_Type"] == selected_weight]
 
         # Chart for fit line
-        fit_chart = alt.Chart(selected_fit_data).encode(
-            x=alt.X("x:Q", scale=alt.Scale(type="log", domain=x_domain)),
-            y=alt.Y("y:Q", scale=alt.Scale(type="log", domain=y_domain)),
-            color=alt.Color(
-                "Series:N",
-                scale=alt.Scale(scheme="dark2"),
-                legend=alt.Legend(title=None, orient="top"),
-            ),
-        ).mark_line(strokeWidth=2)
+        fit_chart = (
+            alt.Chart(selected_fit_data)
+            .encode(
+                x=alt.X("x:Q", scale=alt.Scale(type="log", domain=x_domain)),
+                y=alt.Y("y:Q", scale=alt.Scale(type="log", domain=y_domain)),
+                color=alt.Color(
+                    "Series:N",
+                    scale=alt.Scale(scheme="dark2"),
+                    legend=alt.Legend(title=None, orient="top"),
+                ),
+            )
+            .mark_line(strokeWidth=2)
+        )
 
         # Chart for threshold lines
-        threshold_chart = alt.Chart(selected_threshold_data).encode(
-            x=alt.X("x:Q", scale=alt.Scale(type="log", domain=x_domain)),
-            y=alt.Y("y:Q", scale=alt.Scale(type="log", domain=y_domain)),
-            color=alt.Color(
-                "Series:N",
-                scale=alt.Scale(scheme="dark2"),
-                legend=alt.Legend(title=None, orient="top"),
-            ),
-            tooltip=[
-                alt.Tooltip("Series:N", title="Threshold"),
-                alt.Tooltip("x:Q", title="Value", format=".3g"),
-            ],
-        ).mark_rule(strokeDash=[4, 4], strokeWidth=2)
+        threshold_chart = (
+            alt.Chart(selected_threshold_data)
+            .encode(
+                x=alt.X("x:Q", scale=alt.Scale(type="log", domain=x_domain)),
+                y=alt.Y("y:Q", scale=alt.Scale(type="log", domain=y_domain)),
+                color=alt.Color(
+                    "Series:N",
+                    scale=alt.Scale(scheme="dark2"),
+                    legend=alt.Legend(title=None, orient="top"),
+                ),
+                tooltip=[
+                    alt.Tooltip("Series:N", title="Threshold"),
+                    alt.Tooltip("x:Q", title="Value", format=".3g"),
+                ],
+            )
+            .mark_rule(strokeDash=[4, 4], strokeWidth=2)
+        )
 
         # Combine all charts
-        combined_chart = alt.layer(
-            points_chart,
-            fit_chart,
-            threshold_chart
-        ).resolve_scale(
-            color='shared'
-        ).properties(
-            width=600,  # Adjusted chart width to fit the narrower layout
-            height=400
-        )
+        combined_chart = alt.layer(points_chart, fit_chart, threshold_chart).resolve_scale(color="shared").properties(width=600, height=400)  # Adjusted chart width to fit the narrower layout
 
         return combined_chart
 
@@ -416,11 +429,7 @@ if st.session_state.data is not None:
             col1, col2 = st.columns([1, 1])
 
             with col1:
-                selected_weight = st.selectbox(
-                    "Select Weight Type",
-                    options=["1/x^2", "1/x", "none"],
-                    index=0
-                )
+                selected_weight = st.selectbox("Select Weight Type", options=["1/x^2", "1/x", "none"], index=0)
 
             with col2:
                 sig_figs = st.slider(
@@ -428,7 +437,7 @@ if st.session_state.data is not None:
                     min_value=1,
                     max_value=6,
                     value=st.session_state.last_sig_figs,
-                    help="Number of significant figures to display in results"
+                    help="Number of significant figures to display in results",
                 )
 
             # Check if sig_figs has changed
@@ -464,10 +473,12 @@ if st.session_state.data is not None:
                 st.header("Results")
 
                 # Create a dataframe for display
-                results_df = pd.DataFrame({
-                    "Parameter": list(weight_results.keys()),
-                    "Value": list(weight_results.values()),
-                })
+                results_df = pd.DataFrame(
+                    {
+                        "Parameter": list(weight_results.keys()),
+                        "Value": list(weight_results.values()),
+                    }
+                )
 
                 # Show results table
                 st.table(results_df)
@@ -475,7 +486,7 @@ if st.session_state.data is not None:
                 # Create download button for results
                 results_csv = results_df.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    label=f"Download Results as CSV",
+                    label="Download Results as CSV",
                     data=results_csv,
                     file_name=f"llodlloq_results_{selected_weight.replace('/', '_')}.csv",
                     mime="text/csv",

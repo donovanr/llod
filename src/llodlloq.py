@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.typing as npt
 from sklearn.linear_model import LinearRegression
 
 
@@ -37,8 +36,8 @@ def weighted_least_squares(x, y, weight_type="1/x^2"):
 
     # Calculate predictions and R^2 in log space
     log_y_pred = unweighted_model.predict(log_X)
-    ss_tot = np.sum((log_y - np.mean(log_y))**2)
-    ss_res = np.sum((log_y - log_y_pred)**2)
+    ss_tot = np.sum((log_y - np.mean(log_y)) ** 2)
+    ss_res = np.sum((log_y - log_y_pred) ** 2)
     r_squared = 1 - (ss_res / ss_tot)
 
     output = {
@@ -46,11 +45,10 @@ def weighted_least_squares(x, y, weight_type="1/x^2"):
         "slope": slope,
         "LLOD": LLOD,
         "LLOQ": LLOQ,
-        "r_squared": r_squared  # Add R-squared value
+        "r_squared": r_squared,  # Add R-squared value
     }
 
     return output
-
 
 
 def format_with_sig_figs(value, sig_figs):

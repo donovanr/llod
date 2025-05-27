@@ -2,33 +2,21 @@
 Tests for the Streamlit app
 """
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-import os
-import tempfile
-import sys
-from pathlib import Path
 from unittest.mock import patch
 
-# Add the root directory to the path so we can import app
-ROOT_DIR = Path(__file__).parent.parent
-sys.path.append(str(ROOT_DIR))
+import pandas as pd
 
-# Import functions from app (without running the Streamlit app)
+# Import app functions
 from app import process_uploaded_data, calculate_all_results, calculate_visualization_data
 
 
 def test_process_uploaded_data():
     """Test process_uploaded_data function"""
     # Create a test DataFrame
-    data = pd.DataFrame({
-        'x': [2, 5, 10, 50, 100, 500],
-        'y': [2.9, 5.1, 8.1, 28.1, 52.5, 124.2]
-    })
+    data = pd.DataFrame({"x": [2, 5, 10, 50, 100, 500], "y": [2.9, 5.1, 8.1, 28.1, 52.5, 124.2]})
 
     # Mock st.error function to prevent it from raising errors during tests
-    with patch('streamlit.error'):
+    with patch("streamlit.error"):
         # Process data
         processed = process_uploaded_data(data)
 
@@ -37,30 +25,21 @@ def test_process_uploaded_data():
         pd.testing.assert_frame_equal(processed, data)
 
         # Test with missing columns
-        bad_data = pd.DataFrame({
-            'a': [1, 2, 3],
-            'b': [4, 5, 6]
-        })
+        bad_data = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
         assert process_uploaded_data(bad_data) is None
 
         # Test with non-positive values
-        bad_data_2 = pd.DataFrame({
-            'x': [0, 2, 3],
-            'y': [1, 2, 3]
-        })
+        bad_data_2 = pd.DataFrame({"x": [0, 2, 3], "y": [1, 2, 3]})
         assert process_uploaded_data(bad_data_2) is None
 
 
 def test_calculate_all_results():
     """Test calculate_all_results function"""
     # Create a test DataFrame
-    data = pd.DataFrame({
-        'x': [2, 5, 10, 50, 100, 500],
-        'y': [2.9, 5.1, 8.1, 28.1, 52.5, 124.2]
-    })
+    data = pd.DataFrame({"x": [2, 5, 10, 50, 100, 500], "y": [2.9, 5.1, 8.1, 28.1, 52.5, 124.2]})
 
     # Mock st.error and st.spinner
-    with patch('streamlit.error'), patch('streamlit.spinner'):
+    with patch("streamlit.error"), patch("streamlit.spinner"):
         # Calculate results
         results, formatted_results = calculate_all_results(data, 3)
 
@@ -82,13 +61,10 @@ def test_calculate_all_results():
 def test_calculate_visualization_data():
     """Test calculate_visualization_data function"""
     # Create a test DataFrame
-    data = pd.DataFrame({
-        'x': [2, 5, 10, 50, 100, 500],
-        'y': [2.9, 5.1, 8.1, 28.1, 52.5, 124.2]
-    })
+    data = pd.DataFrame({"x": [2, 5, 10, 50, 100, 500], "y": [2.9, 5.1, 8.1, 28.1, 52.5, 124.2]})
 
     # Mock st.error
-    with patch('streamlit.error'), patch('streamlit.spinner'):
+    with patch("streamlit.error"), patch("streamlit.spinner"):
         # First calculate results
         results, _ = calculate_all_results(data, 3)
 

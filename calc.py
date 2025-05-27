@@ -13,12 +13,8 @@ from src.llodlloq import weighted_least_squares, format_with_sig_figs
 def main():
     """Main function for command-line execution."""
     # Set up argument parser
-    parser = argparse.ArgumentParser(
-        description="Calculate LLOD and LLOQ from CSV data"
-    )
-    parser.add_argument(
-        "csv_file", type=str, help="Path to CSV file containing x and y columns"
-    )
+    parser = argparse.ArgumentParser(description="Calculate LLOD and LLOQ from CSV data")
+    parser.add_argument("csv_file", type=str, help="Path to CSV file containing x and y columns")
     parser.add_argument(
         "--weight_type",
         type=str,
@@ -65,15 +61,10 @@ def main():
             sys.exit(1)
 
         # Run the analysis
-        out = weighted_least_squares(
-            data.x.values, data.y.values, weight_type=args.weight_type
-        )
+        out = weighted_least_squares(data.x.values, data.y.values, weight_type=args.weight_type)
 
         # Format the output with the specified number of significant figures
-        formatted_out = {
-            key: format_with_sig_figs(value, args.sig_figs)
-            for key, value in out.items()
-        }
+        formatted_out = {key: format_with_sig_figs(value, args.sig_figs) for key, value in out.items()}
 
         # Display results
         print("\nResults:")
