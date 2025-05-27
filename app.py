@@ -7,21 +7,49 @@ import io
 # Import functions from llodlloq module
 from src.llodlloq import weighted_least_squares, format_with_sig_figs
 
-# Set page configuration
+# Set page configuration - change to centered layout
 st.set_page_config(
     page_title="LLOD/LLOQ Calculator",
     page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    layout="centered",  # Change from 'wide' to 'centered'
 )
 
-# Initialize minimal session state
+# Add custom CSS to control the max width of the content and improve spacing
+st.markdown("""
+<style>
+    .main .block-container {
+        max-width: 900px;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    section[data-testid="stSidebar"] {
+        width: 0px !important;
+    }
+    h1, h2, h3 {
+        margin-top: 1.5rem !important;
+        margin-bottom: 1rem !important;
+    }
+    .element-container {
+        margin-bottom: 1.5rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Initialize session state
 if "data" not in st.session_state:
     st.session_state.data = None
 if "file_name" not in st.session_state:
     st.session_state.file_name = None
 if "need_recalculation" not in st.session_state:
     st.session_state.need_recalculation = True
+if "last_sig_figs" not in st.session_state:
+    st.session_state.last_sig_figs = 3
+if "results" not in st.session_state:
+    st.session_state.results = None
+if "formatted_results" not in st.session_state:
+    st.session_state.formatted_results = None
+if "visualization_data" not in st.session_state:
+    st.session_state.visualization_data = None
 
 # App title and description
 st.title("LLOD/LLOQ Calculator")
@@ -32,29 +60,8 @@ and Limit of Quantification (LLOQ) using weighted least squares regression.
 """
 )
 
-# Sidebar with controls
-st.sidebar.header("Settings")
-
-sig_figs = st.sidebar.slider(
-    "Significant Figures",
-    min_value=1,
-    max_value=6,
-    value=3,
-    key="sig_figs",
-    help="Number of significant figures to display in results",
-)
-
-# Add recalculate button to sidebar
-recalculate = st.sidebar.button(
-    "Recalculate",
-    key="recalculate",
-    help="Click to recalculate with current settings"
-)
-if recalculate:
-    st.session_state.need_recalculation = True
-
-# File upload section
-st.subheader("Data Input")
+# 1. DATA INPUT SECTION
+st.header("Data Input")
 
 # Example data for download
 example_data = """x,y
@@ -65,25 +72,39 @@ example_data = """x,y
 100,52.5
 500,124.2"""
 
-# Create a download button for example data
-example_data_bytes = example_data.encode('utf-8')
-st.download_button(
-    label="Download Example Data",
-    data=example_data_bytes,
-    file_name="example_data.csv",
-    mime="text/csv",
-    help="Download example data to try with the calculator"
-)
+# File upload row
+col1, col2 = st.columns([2, 1])
 
-st.write("Upload your CSV file with 'x' and 'y' columns:")
+with col1:
+    st.write("Upload your CSV file with 'x' and 'y' columns:")
+    # File uploader
+    uploaded_file = st.file_uploader(
+        "Upload a CSV file",
+        type=["csv"],
+        key="file_uploader",
+        help="CSV file must contain 'x' and 'y' columns with positive values"
+    )
 
-# File uploader
-uploaded_file = st.file_uploader(
-    "Upload a CSV file",
-    type=["csv"],
-    key="file_uploader",
-    help="CSV file must contain 'x' and 'y' columns with positive values"
-)
+with col2:
+    st.write("Or try with example data:")
+    # Create a download button for example data
+    example_data_bytes = example_data.encode('utf-8')
+    st.download_button(
+        label="Download Example Data",
+        data=example_data_bytes,
+        file_name="example_data.csv",
+        mime="text/csv",
+        help="Download example data to try with the calculator"
+    )
+
+    # Recalculate button
+    recalculate = st.button(
+        "Recalculate",
+        key="recalculate",
+        help="Click to recalculate with current settings"
+    )
+    if recalculate:
+        st.session_state.need_recalculation = True
 
 # Handle file upload
 if uploaded_file is not None:
@@ -95,11 +116,13 @@ if uploaded_file is not None:
             st.session_state.data = data
             st.session_state.file_name = uploaded_file.name
             st.session_state.need_recalculation = True
+            st.session_state.visualization_data = None  # Reset visualization data
             st.success(f"File '{uploaded_file.name}' uploaded successfully")
     except Exception as e:
         st.error(f"Error reading file: {str(e)}")
         st.session_state.data = None
         st.session_state.file_name = None
+        st.session_state.visualization_data = None
 
 
 # Cache data processing function to avoid recalculation
@@ -167,8 +190,6 @@ def calculate_visualization_data(data, results):
         # Calculate maximum ranges across all weighting types
         all_llod_values = []
         all_lloq_values = []
-        fit_values_x = []
-        fit_values_y = []
 
         # For each weighting type
         for weight_type, result in results.items():
@@ -271,20 +292,30 @@ def calculate_visualization_data(data, results):
         threshold_data = pd.concat(threshold_data_frames)
 
         # Return all visualization data
-        return point_data, fit_data, threshold_data, x_domain, y_domain
+        return {
+            "point_data": point_data,
+            "fit_data": fit_data,
+            "threshold_data": threshold_data,
+            "x_domain": x_domain,
+            "y_domain": y_domain
+        }
 
     except Exception as e:
         st.error(f"Error creating visualization data: {str(e)}")
-        return None, None, None, None, None
+        return None
 
 
-def create_interactive_visualization(point_data, fit_data, threshold_data, x_domain, y_domain):
+def create_visualization(vis_data, selected_weight):
     """
-    Create an interactive visualization with a dropdown to select weight type
+    Create visualization for the selected weight type
     """
     try:
-        # Create a simpler visualization without the complex interactive elements
-        # Create a selectbox in Streamlit instead
+        # Extract data from the visualization data dictionary
+        point_data = vis_data["point_data"]
+        fit_data = vis_data["fit_data"]
+        threshold_data = vis_data["threshold_data"]
+        x_domain = vis_data["x_domain"]
+        y_domain = vis_data["y_domain"]
 
         # Base chart for data points (always visible)
         points_chart = alt.Chart(point_data).encode(
@@ -300,13 +331,6 @@ def create_interactive_visualization(point_data, fit_data, threshold_data, x_dom
                 legend=alt.Legend(title=None, orient="top"),
             ),
         ).mark_circle(size=60)
-
-        # Create a Streamlit selectbox for weight type
-        selected_weight = st.selectbox(
-            "Select Weight Type",
-            options=["1/x^2", "1/x", "none"],
-            index=0
-        )
 
         # Filter the fit data for the selected weight type
         selected_fit_data = fit_data[fit_data['Weight_Type'] == selected_weight]
@@ -346,90 +370,15 @@ def create_interactive_visualization(point_data, fit_data, threshold_data, x_dom
         ).resolve_scale(
             color='shared'
         ).properties(
-            width=700,
+            width=600,  # Adjusted chart width to fit the narrower layout
             height=400
         )
 
-        return combined_chart, selected_weight
+        return combined_chart
 
     except Exception as e:
-        st.error(f"Error creating interactive visualization: {str(e)}")
-        return None, None
-
-
-def display_results(formatted_results, chart, selected_weight):
-    """Display the results table and visualization"""
-    # Create columns for displaying results and controls
-    st.subheader("Results")
-
-    # Get the results for the selected weight type
-    weight_results = formatted_results[selected_weight]
-
-    # Create a dataframe for display
-    results_df = pd.DataFrame({
-        "Parameter": list(weight_results.keys()),
-        "Value": list(weight_results.values()),
-    })
-
-    # Show results in table format
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.table(results_df)
-
-    with col2:
-        st.write(
-            """
-        ### Parameters Explained
-        - **Intercept**: The y-value when x=1 in the power model (y = intercept * x^slope)
-        - **Slope**: The power to which x is raised in the model
-        - **LLOD**: Limit of Detection, calculated as (3/intercept)^(1/slope)
-        - **LLOQ**: Limit of Quantification, calculated as (10/intercept)^(1/slope)
-        - **R²**: Coefficient of determination for the unweighted power fit
-        """
-        )
-
-    # Display the visualization
-    st.subheader("Concentration-Response with LLOD and LLOQ")
-    st.altair_chart(chart, use_container_width=True)
-
-    # Add LLOD/LLOQ values annotation under the chart
-    st.markdown(
-        f"""
-    **LLOD = {weight_results['LLOD']}** | **LLOQ = {weight_results['LLOQ']}** | **R² = {weight_results['r_squared']}**
-    """
-    )
-
-    # Create download button for results
-    results_csv = results_df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label=f"Download Results ({selected_weight} weighting) as CSV",
-        data=results_csv,
-        file_name=f"llodlloq_results_{selected_weight.replace('/', '_')}.csv",
-        mime="text/csv",
-    )
-
-    # Add methodology explanation
-    st.subheader("Methodology")
-    st.write(
-        f"""
-    This calculator uses weighted least squares regression in log-log space to model the relationship
-    between concentration (x) and response (y). The model follows the power law form:
-
-    $y = a x^b$
-
-    Where:
-    - a is the intercept ({weight_results['intercept']})
-    - b is the slope ({weight_results['slope']})
-
-    The LLOD is calculated as the concentration that would produce a response 3 times the background:
-    $LLOD = (3/intercept)^{{1/slope}}$
-
-    The LLOQ is calculated as the concentration that would produce a response 10 times the background:
-    $LLOQ = (10/intercept)^{{1/slope}}$
-
-    The regression was performed using {selected_weight} weighting in log-log space.
-    """
-    )
+        st.error(f"Error creating visualization: {str(e)}")
+        return None
 
 
 # Display uploaded data and run calculations
@@ -438,51 +387,134 @@ if st.session_state.data is not None:
     processed_data = process_uploaded_data(st.session_state.data)
 
     if processed_data is not None:
-        st.subheader("Data Preview")
-        st.dataframe(processed_data)
+        # 2. DATA PREVIEW SECTION
+        st.header("Data Preview")
+        st.dataframe(processed_data, height=200)
 
-        # Calculate results for all weighting types
-        if st.session_state.need_recalculation:
-            results, formatted_results = calculate_all_results(processed_data, sig_figs)
-
-            if results:
-                # Create visualization data for all weighting types
-                point_data, fit_data, threshold_data, x_domain, y_domain = calculate_visualization_data(
-                    processed_data, results
-                )
-
-                if point_data is not None:
-                    # Create visualization for the selected weight type
-                    chart, selected_weight = create_interactive_visualization(
-                        point_data, fit_data, threshold_data, x_domain, y_domain
-                    )
-
-                    if chart:
-                        # Display results and visualization
-                        display_results(formatted_results, chart, selected_weight)
-
-                        # Mark calculation as complete
-                        st.session_state.need_recalculation = False
-        else:
-            # Recalculate if needed (this will happen if the session was reset)
-            results, formatted_results = calculate_all_results(processed_data, sig_figs)
+        # Calculate results if needed
+        if st.session_state.need_recalculation or st.session_state.visualization_data is None:
+            # Calculate results for all weighting types
+            results, formatted_results = calculate_all_results(processed_data, st.session_state.last_sig_figs)
 
             if results:
-                # Create visualization data for all weighting types
-                point_data, fit_data, threshold_data, x_domain, y_domain = calculate_visualization_data(
-                    processed_data, results
+                # Store results in session state
+                st.session_state.results = results
+                st.session_state.formatted_results = formatted_results
+
+                # Calculate visualization data
+                vis_data = calculate_visualization_data(processed_data, results)
+                if vis_data:
+                    st.session_state.visualization_data = vis_data
+                    st.session_state.need_recalculation = False
+
+        # 3. MAIN PLOT SECTION
+        if st.session_state.visualization_data and st.session_state.formatted_results:
+            # Controls for weight type and sig figs
+            st.header("Concentration-Response with LLOD and LLOQ")
+
+            # 4. WEIGHT TYPE AND SIG FIGS CONTROLS (right under the plot)
+            col1, col2 = st.columns([1, 1])
+
+            with col1:
+                selected_weight = st.selectbox(
+                    "Select Weight Type",
+                    options=["1/x^2", "1/x", "none"],
+                    index=0
                 )
 
-                if point_data is not None:
-                    # Create visualization for the selected weight type
-                    chart, selected_weight = create_interactive_visualization(
-                        point_data, fit_data, threshold_data, x_domain, y_domain
-                    )
+            with col2:
+                sig_figs = st.slider(
+                    "Significant Figures",
+                    min_value=1,
+                    max_value=6,
+                    value=st.session_state.last_sig_figs,
+                    help="Number of significant figures to display in results"
+                )
 
-                    if chart:
-                        # Display results and visualization
-                        display_results(formatted_results, chart, selected_weight)
+            # Check if sig_figs has changed
+            if sig_figs != st.session_state.last_sig_figs:
+                # Recalculate with new sig_figs
+                results, formatted_results = calculate_all_results(processed_data, sig_figs)
+                if results:
+                    st.session_state.results = results
+                    st.session_state.formatted_results = formatted_results
+                    st.session_state.last_sig_figs = sig_figs
+            else:
+                # Use the existing results
+                formatted_results = st.session_state.formatted_results
 
+            # Create chart for selected weight type
+            chart = create_visualization(st.session_state.visualization_data, selected_weight)
+
+            if chart:
+                # Display the chart
+                st.altair_chart(chart, use_container_width=True)
+
+                # Get the results for the selected weight type
+                weight_results = formatted_results[selected_weight]
+
+                # Add LLOD/LLOQ values annotation under the chart
+                st.markdown(
+                    f"""
+                **LLOD = {weight_results['LLOD']}** | **LLOQ = {weight_results['LLOQ']}** | **R² = {weight_results['r_squared']}**
+                """
+                )
+
+                # 5. RESULTS SECTION
+                st.header("Results")
+
+                # Create a dataframe for display
+                results_df = pd.DataFrame({
+                    "Parameter": list(weight_results.keys()),
+                    "Value": list(weight_results.values()),
+                })
+
+                # Show results table
+                st.table(results_df)
+
+                # Create download button for results
+                results_csv = results_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label=f"Download Results as CSV",
+                    data=results_csv,
+                    file_name=f"llodlloq_results_{selected_weight.replace('/', '_')}.csv",
+                    mime="text/csv",
+                )
+
+                # 6. PARAMETERS EXPLAINED SECTION
+                st.header("Parameters Explained")
+                st.write(
+                    """
+                - **Intercept**: The y-value when x=1 in the power model (y = intercept * x^slope)
+                - **Slope**: The power to which x is raised in the model
+                - **LLOD**: Limit of Detection, calculated as (3/intercept)^(1/slope)
+                - **LLOQ**: Limit of Quantification, calculated as (10/intercept)^(1/slope)
+                - **R²**: Coefficient of determination for the unweighted power fit
+                """
+                )
+
+                # 7. METHODOLOGY SECTION
+                st.header("Methodology")
+                st.write(
+                    f"""
+                This calculator uses weighted least squares regression in log-log space to model the relationship
+                between concentration (x) and response (y). The model follows the power law form:
+
+                $y = a x^b$
+
+                Where:
+                - a is the intercept ({weight_results['intercept']})
+                - b is the slope ({weight_results['slope']})
+
+                The LLOD is calculated as the concentration that would produce a response 3 times the background:
+                $LLOD = (3/intercept)^{{1/slope}}$
+
+                The LLOQ is calculated as the concentration that would produce a response 10 times the background:
+                $LLOQ = (10/intercept)^{{1/slope}}$
+
+                The regression was performed using {selected_weight} weighting in log-log space.
+                """
+                )
 else:
     st.info("Please upload a CSV file to begin analysis. You can use the example data provided.")
 
