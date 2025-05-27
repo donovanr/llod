@@ -446,7 +446,7 @@ if st.session_state.data is not None:
             # Create chart for selected weight type
             chart = create_visualization(st.session_state.visualization_data, selected_weight)
 
-            if chart:
+            if chart and formatted_results is not None:
                 # Display the chart
                 st.altair_chart(chart, use_container_width=True)
 

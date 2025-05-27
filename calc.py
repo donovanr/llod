@@ -7,15 +7,7 @@ import argparse
 import sys
 import pandas as pd
 
-# Import functions from src.llodlloq module
-try:
-    from src.llodlloq import weighted_least_squares, format_with_sig_figs
-except ImportError:
-    # Fall back for different import scenarios
-    try:
-        from llodlloq import weighted_least_squares, format_with_sig_figs
-    except ImportError:
-        from llodlloq.src.llodlloq import weighted_least_squares, format_with_sig_figs
+from src.llodlloq import weighted_least_squares, format_with_sig_figs
 
 
 def main():
