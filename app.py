@@ -43,6 +43,10 @@ def on_weight_change():
 def on_recalculate():
     """Called when recalculate button is pressed"""
     st.session_state.need_recalculation = True
+    # Also reset the domains to force recalculation with current data
+    st.session_state.x_domain = None
+    st.session_state.y_domain = None
+    st.session_state.data_points_chart = None
 
 # App title and description
 st.title("LLOD/LLOQ Calculator")
@@ -124,14 +128,22 @@ if uploaded_file is not None:
         if st.session_state.file_name != uploaded_file.name:
             st.session_state.data = data
             st.session_state.file_name = uploaded_file.name
-            st.session_state.data_points_chart = None  # Reset visualization
-            st.session_state.calculated_results = {}   # Reset calculations
+            # Reset visualization parameters
+            st.session_state.data_points_chart = None
+            st.session_state.x_domain = None  # Reset domains to force recalculation
+            st.session_state.y_domain = None  # Reset domains to force recalculation
+            st.session_state.calculated_results = {}
             st.session_state.need_recalculation = True
             st.success(f"File '{uploaded_file.name}' uploaded successfully")
     except Exception as e:
         st.error(f"Error reading file: {str(e)}")
         st.session_state.data = None
         st.session_state.file_name = None
+        # Also reset visualization parameters on error
+        st.session_state.data_points_chart = None
+        st.session_state.x_domain = None
+        st.session_state.y_domain = None
+        st.session_state.calculated_results = {}
 
 
 # Cache data processing function to avoid recalculation
@@ -182,7 +194,8 @@ def calculate_results(data, weight_type, sig_figs):
 def calculate_initial_domains(data):
     """
     Calculate initial results and determine appropriate domains for the visualization
-    that include both the data points and the LLOD/LLOQ values.
+    that include both the data points and the LLOD/LLOQ values, as well as the
+    regression line values at these points.
     """
     try:
         # Calculate results with default weighting to get LLOD/LLOQ values
@@ -190,9 +203,15 @@ def calculate_initial_domains(data):
             data.x.values, data.y.values, weight_type="1/x^2"
         )
 
-        # Extract LLOD and LLOQ values
+        # Extract model parameters and threshold values
+        intercept = default_results["intercept"]
+        slope = default_results["slope"]
         llod = float(default_results["LLOD"])
         lloq = float(default_results["LLOQ"])
+
+        # Calculate y values at LLOD and LLOQ using the power model: y = intercept * x^slope
+        y_at_llod = intercept * (llod ** slope)
+        y_at_lloq = intercept * (lloq ** slope)
 
         # Determine data range
         x_min_data = min(data.x)
@@ -205,19 +224,24 @@ def calculate_initial_domains(data):
         x_min = min(x_values)
         x_max = max(x_values)
 
+        # Create a union of data range and regression line values at LLOD/LLOQ for y-axis
+        y_values = list(data.y) + [y_at_llod, y_at_lloq]
+        y_min = min(y_values)
+        y_max = max(y_values)
+
         # Add padding in log space
         x_padding = 0.3  # 30% padding
         y_padding = 0.3
 
-        # Ensure x_min is positive for log scaling
+        # Ensure values are positive for log scaling
         x_min = max(1e-10, x_min)
-        y_min = max(1e-10, y_min_data)
+        y_min = max(1e-10, y_min)
 
         # Add padding in log space
         log_x_min = np.log10(x_min) - x_padding
         log_x_max = np.log10(x_max) + x_padding
         log_y_min = np.log10(y_min) - y_padding
-        log_y_max = np.log10(y_max_data) + y_padding
+        log_y_max = np.log10(y_max) + y_padding
 
         # Convert back to linear space with padding
         x_min_padded = 10 ** log_x_min
@@ -225,9 +249,17 @@ def calculate_initial_domains(data):
         y_min_padded = 10 ** log_y_min
         y_max_padded = 10 ** log_y_max
 
+        # Also evaluate the fit line at the extremes of the x domain to ensure full visibility
+        y_at_xmin = intercept * (x_min_padded ** slope)
+        y_at_xmax = intercept * (x_max_padded ** slope)
+
+        # Adjust y domain if necessary
+        y_min_final = min(y_min_padded, y_at_xmin, y_at_llod, y_at_lloq)
+        y_max_final = max(y_max_padded, y_at_xmax, y_at_llod, y_at_lloq)
+
         # Return the domains
         x_domain = [x_min_padded, x_max_padded]
-        y_domain = [y_min_padded, y_max_padded]
+        y_domain = [y_min_final, y_max_final]
 
         return x_domain, y_domain
 
@@ -262,12 +294,12 @@ def calculate_initial_domains(data):
             return None, None
 
 
-# Cache the creation of the base data visualization
+# Cache the creation of the base data visualization with proper cache invalidation
 @st.cache_data(show_spinner=False)
-def create_base_visualization(data, x_domain, y_domain):
+def create_base_visualization(data, x_domain, y_domain, file_name):
     """
     Create and cache the base data visualization (just the data points).
-    This doesn't depend on weighting type, so it can be cached.
+    The file_name parameter is included to ensure cache invalidation when a new file is uploaded.
     """
     try:
         # Create dataframe for data points
@@ -305,7 +337,7 @@ def create_model_visualization(results, x_domain, y_domain):
     This depends on the weighting type and changes when it changes.
     """
     try:
-        # Create x range for prediction line using the same domain as the base chart
+        # Create x range for prediction line spanning the entire domain
         x_range = np.logspace(np.log10(x_domain[0]), np.log10(x_domain[1]), 100)
 
         # Calculate predicted y values
@@ -407,7 +439,13 @@ def display_results(data, raw_results, formatted_results, weight_type, x_domain,
         if st.session_state.data_points_chart is None:
             # Create and cache the base chart
             with st.spinner("Creating visualization..."):
-                base_chart = create_base_visualization(data, x_domain, y_domain)
+                # Pass file_name to ensure cache invalidation when file changes
+                base_chart = create_base_visualization(
+                    data,
+                    x_domain,
+                    y_domain,
+                    st.session_state.file_name
+                )
                 if base_chart is not None:
                     st.session_state.data_points_chart = base_chart
 
